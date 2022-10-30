@@ -190,6 +190,8 @@ class Interpreter(Visitor):
 
     @visit.register
     def _(self, stmt: Expression):
+        if stmt.expression is None:
+            return
         return self.evaluate(stmt.expression)
 
     @visit.register
@@ -197,6 +199,7 @@ class Interpreter(Visitor):
         func = LoxFunction(stmt, self.environment)
         if stmt.name is not None:
             self.environment.define(stmt.name, func)
+        return func
 
     @visit.register
     def _(self, stmt: Print) -> None:

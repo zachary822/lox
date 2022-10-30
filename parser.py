@@ -50,7 +50,9 @@ class LoxFunction(LoxCallable):
             return e.value
 
     def __str__(self):
-        return f"<fn {self.declaration.name.lexeme}>"
+        if self.declaration.name is not None:
+            return f"<fn {self.declaration.name.lexeme}>"
+        return "<fn>"
 
 
 class Expr(ABC):
@@ -134,13 +136,13 @@ class Stmt(ABC):
 
 
 class Expression(Stmt):
-    expression: Expr
+    expression: Optional[Expr]
 
-    def __init__(self, expression: Expr):
+    def __init__(self, expression: Optional[Expr]):
         self.expression = expression
 
 
-class Function(Stmt):
+class Function(Stmt, Expr):
     name: Optional[Token]
     params: list[Token]
     body: list[Stmt]
@@ -246,7 +248,9 @@ class Parser:
         return self.expression_statement()
 
     def expression_statement(self) -> Stmt:
-        value = self.expression()
+        value: Optional[Expr] = None
+        if not self.check(TokenType.SEMICOLON):
+            value = self.expression()
         self.consume(TokenType.SEMICOLON, "Expect ';' after value.")
         return Expression(value)
 
@@ -496,6 +500,9 @@ class Parser:
         if self.match(TokenType.NUMBER, TokenType.STRING):
             return Literal(self.previous().literal)
 
+        if self.match(TokenType.FUN):
+            return self.function("function")
+
         if self.match(TokenType.IDENTIFIER):
             return Variable(self.previous())
 
@@ -503,7 +510,6 @@ class Parser:
             expr = self.expression()
             self.consume(TokenType.RIGHT_PAREN, "Expect ')' after expression.")
             return Grouping(expr)
-
         raise self.error(self.peek(), "Expect expression.")
 
     def match(self, *types: TokenType) -> bool:
