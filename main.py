@@ -1,10 +1,11 @@
 import argparse
+import sys
 from pathlib import Path
 
-from environment import Environment
-from exceptions import LoxError, LoxRuntimeError
+from exceptions import LoxRuntimeError
 from interpreter import Interpreter
 from parser import Parser
+from resolver import Resolver
 from scanner import Scanner, Token, TokenType
 
 
@@ -12,25 +13,33 @@ class Lox:
     has_error: bool
     has_runtime_error: bool
 
-    environment: Environment
-
     def __init__(self):
         self.has_error = False
         self.has_runtime_error = False
-        self.environment = Environment()
 
     def run_file(self, path: Path):
         with path.open() as f:
             self.run(f.read())
         if self.has_error or self.has_runtime_error:
-            raise LoxError
+            sys.exit(1)
 
     def run(self, line: str):
         scanner = Scanner(self, line)
         tokens = scanner.scan_tokens()
         parser = Parser(self, tokens)
         statements = parser.parse()
-        interpreter = Interpreter(self, self.environment)
+
+        if self.has_error:
+            return
+
+        interpreter = Interpreter(self)
+        resolver = Resolver(self, interpreter)
+
+        resolver.resolve(statements)
+
+        if self.has_error:
+            return
+
         interpreter.interpret(statements)
 
     def run_prompt(self):
@@ -49,11 +58,11 @@ class Lox:
             self.report(token.line, f"at '{token.lexeme}'", message)
 
     def runtime_error(self, e: LoxRuntimeError):
-        print(e.args[0] + f"\n [line {e.token.line}]")
+        print(e.args[0] + f"\n [line {e.token.line}]", file=sys.stderr)
         self.has_runtime_error = True
 
     def report(self, line: int, where: str, message: str):
-        print(f"[line {line}] Error {where}: {message}")
+        print(f"[line {line}] Error {where}: {message}", file=sys.stderr)
         self.has_error = True
 
 

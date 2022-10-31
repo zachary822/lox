@@ -1,6 +1,6 @@
 import time
 from functools import singledispatchmethod
-from typing import Any, Optional, TYPE_CHECKING
+from typing import Any, TYPE_CHECKING
 
 from environment import Environment
 from exceptions import InterpreterError, LoxRuntimeError, ReturnError
@@ -51,17 +51,14 @@ global_env.define(Token(TokenType.IDENTIFIER, "clock", None, 0), Clock())
 
 class Interpreter(Visitor):
     lox: "Lox"
+    locals: dict[Expr, int]
     globals: Environment = global_env
     environment: Environment
 
-    def __init__(self, lox: "Lox", environment: Optional[Environment] = None):
+    def __init__(self, lox: "Lox"):
         self.lox = lox
-        if environment is not None:
-            self.environment = environment
-        else:
-            self.environment = Environment()
-
-        self.environment.set_global(global_env)
+        self.environment = global_env
+        self.locals = {}
 
     def interpret(self, statements: list[Stmt]):
         try:
@@ -164,12 +161,18 @@ class Interpreter(Visitor):
 
     @visit.register
     def _(self, expr: Variable):
-        return self.environment.get(expr.name)
+        return self.lookup_variable(expr.name, expr)
 
     @visit.register
     def _(self, expr: Assign):
         value = self.evaluate(expr.value)
-        self.environment.assign(expr.name, value)
+
+        try:
+            distance = self.locals[expr]
+            self.environment.assign_at(distance, expr.name, value)
+        except KeyError:
+            self.globals.assign(expr.name, value)
+
         return value
 
     @visit.register
@@ -237,6 +240,16 @@ class Interpreter(Visitor):
             self.execute(stmt.else_branch)
 
         return None
+
+    def resolve(self, expr: Expr, depth: int):
+        self.locals[expr] = depth
+
+    def lookup_variable(self, name: Token, expr: Expr):
+        try:
+            distance = self.locals[expr]
+            return self.environment.get_at(distance, name)
+        except KeyError:
+            return self.globals.get(name)
 
     def execute_block(self, statements: list[Stmt], environment: Environment):
         previous = self.environment
